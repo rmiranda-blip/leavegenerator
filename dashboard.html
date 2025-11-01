@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CDA HR System - Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+  <script type="module" src="scripts/firebase-app.js"></script>
+
+  <style>
+    header {
+      background: #0b5394;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 20px;
+    }
+    header h2 {
+      margin: 0;
+      font-size: 20px;
+      flex: 1;
+      text-align: center;
+    }
+    header img {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+    #logoutBtn {
+      background: #e74c3c;
+      border: none;
+      color: #fff;
+      padding: 8px 15px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    #logoutBtn:hover {
+      background: #c0392b;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="img/cda-logo.png" alt="CDA Logo" />
+    <h2>CDA HR System - Dashboard</h2>
+    <button id="logoutBtn">Logout</button>
+  </header>
+
+  <main>
+    <div class="dashboard-container">
+      <!-- Left Panel: Employee Form -->
+      <div class="form-container">
+        <h3>Add / Edit Employee</h3>
+        <form id="employeeForm">
+          <input type="hidden" id="editKey" />
+          <label>Name</label>
+          <input type="text" id="name" placeholder="Employee Name" required />
+          
+          <label>Position</label>
+          <input type="text" id="position" placeholder="Position" required />
+          
+          <label>Department</label>
+          <input type="text" id="department" placeholder="Department" required />
+          
+          <label>Birthday</label>
+          <input type="date" id="birthday" required />
+          
+          <label>Age</label>
+          <input type="number" id="age" placeholder="Age" required />
+          
+          <label>Address</label>
+          <input type="text" id="address" placeholder="Address" required />
+          
+          <label>Sex</label>
+          <select id="sex" required>
+            <option value="">Select Sex</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+          </select>
+          
+          <label>
+            <input type="checkbox" id="pwd" /> PWD
+          </label>
+          <label>
+            <input type="checkbox" id="senior" /> Senior Citizen
+          </label>
+          
+          <label>Photo</label>
+          <input type="file" id="photo" accept="image/*" />
+          <img id="preview" src="" style="width:80px; display:none; border-radius:5px;"/>
+          
+          <button type="submit" id="addBtn">Add Employee</button>
+        </form>
+      </div>
+
+      <!-- Right Panel: Tabs -->
+      <div class="tab-container">
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="employeeTab">Employee List</button>
+          <button class="tab-btn" data-tab="summaryTab">Summary</button>
+        </div>
+
+        <div class="tab-content" id="employeeTab">
+          <table>
+            <thead>
+              <tr>
+                <th>Photo</th>
+                <th>Name</th>
+                <th>Position</th>
+                <th>Department</th>
+                <th>Birthday</th>
+                <th>Age</th>
+                <th>Address</th>
+                <th>Sex</th>
+                <th>PWD</th>
+                <th>Senior</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="employeeTable"></tbody>
+          </table>
+        </div>
+
+        <div class="tab-content" id="summaryTab" style="display:none;">
+          <h3>Summary</h3>
+          <div class="summary-grid">
+            <div class="summary-box">
+              <h4>Total Employees</h4>
+              <p id="totalEmployees" data-value="0">0</p>
+            </div>
+            <div class="summary-box">
+              <h4>Total PWD</h4>
+              <p id="totalPWD" data-value="0">0</p>
+            </div>
+            <div class="summary-box">
+              <h4>Total Senior Citizens</h4>
+              <p id="totalSenior" data-value="0">0</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Firebase + Dashboard Script -->
+  <script type="module">
+    import { db, ref, push, set, onValue, remove, update, get } from "./scripts/firebase-app.js";
+
+    if (localStorage.getItem("loggedIn") !== "true") {
+      window.location.href = "index.html";
+    }
+
+    const employeeForm = document.getElementById("employeeForm");
+    const employeeTable = document.getElementById("employeeTable");
+    const preview = document.getElementById("preview");
+    const photoInput = document.getElementById("photo");
+    const editKey = document.getElementById("editKey");
+
+    const tabs = document.querySelectorAll(".tab-btn");
+    const tabContents = document.querySelectorAll(".tab-content");
+
+    const animateNumber = (element, target) => {
+      let count = 0;
+      const step = Math.ceil(target / 50);
+      const interval = setInterval(() => {
+        count += step;
+        if (count >= target) {
+          count = target;
+          clearInterval(interval);
+        }
+        element.textContent = count;
+      }, 20);
+    };
+
+    tabs.forEach(tab => {
+      tab.addEventListener("click", () => {
+        tabs.forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        tabContents.forEach(tc => tc.style.display = "none");
+        const currentTab = document.getElementById(tab.dataset.tab);
+        currentTab.style.display = "block";
+
+        if(tab.dataset.tab === "summaryTab") {
+          animateNumber(document.getElementById("totalEmployees"), parseInt(document.getElementById("totalEmployees").dataset.value));
+          animateNumber(document.getElementById("totalPWD"), parseInt(document.getElementById("totalPWD").dataset.value));
+          animateNumber(document.getElementById("totalSenior"), parseInt(document.getElementById("totalSenior").dataset.value));
+        }
+      });
+    });
+
+    photoInput.addEventListener("change", () => {
+      const file = photoInput.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = e => {
+          preview.src = e.target.result;
+          preview.style.display = "block";
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    employeeForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = document.getElementById("name").value.trim();
+      const position = document.getElementById("position").value.trim();
+      const department = document.getElementById("department").value.trim();
+      const birthday = document.getElementById("birthday").value;
+      const age = document.getElementById("age").value.trim();
+      const address = document.getElementById("address").value.trim();
+      const sex = document.getElementById("sex").value;
+      const pwd = document.getElementById("pwd").checked;
+      const senior = document.getElementById("senior").checked;
+      const photo = preview.src || "";
+
+      if(!name || !position || !department || !birthday || !age || !address || !sex){
+        alert("Please complete all fields!");
+        return;
+      }
+
+      const employeeData = { name, position, department, birthday, age, address, sex, pwd, senior, photo };
+
+      try {
+        if(editKey.value){
+          await update(ref(db, "employees/"+editKey.value), employeeData);
+          editKey.value = "";
+          document.getElementById("addBtn").textContent = "Add Employee";
+        } else {
+          const newRef = push(ref(db, "employees"));
+          await set(newRef, employeeData);
+        }
+        employeeForm.reset();
+        preview.style.display = "none";
+      } catch(err){
+        console.error("Write failed:", err);
+        alert("Failed to save employee. Check console for details.");
+      }
+    });
+
+    const updateDashboard = snapshot => {
+      employeeTable.innerHTML = "";
+      let totalEmployees = 0, totalPWD = 0, totalSenior = 0;
+
+      snapshot.forEach(child => {
+        const key = child.key;
+        const emp = child.val();
+        totalEmployees++;
+        if(emp.pwd) totalPWD++;
+        if(emp.senior) totalSenior++;
+
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td><img src="${emp.photo || ''}" width="60" style="border-radius:5px;"></td>
+          <td>${emp.name}</td>
+          <td>${emp.position}</td>
+          <td>${emp.department}</td>
+          <td>${emp.birthday}</td>
+          <td>${emp.age}</td>
+          <td>${emp.address}</td>
+          <td>${emp.sex}</td>
+          <td>${emp.pwd ? "Yes" : "No"}</td>
+          <td>${emp.senior ? "Yes" : "No"}</td>
+          <td>
+            <button class="editBtn" data-key="${key}">Edit</button>
+            <button class="deleteBtn" data-key="${key}">Delete</button>
+          </td>`;
+        employeeTable.appendChild(row);
+      });
+
+      document.getElementById("totalEmployees").dataset.value = totalEmployees;
+      document.getElementById("totalPWD").dataset.value = totalPWD;
+      document.getElementById("totalSenior").dataset.value = totalSenior;
+
+      if(document.querySelector(".tab-btn.active").dataset.tab === "summaryTab"){
+        animateNumber(document.getElementById("totalEmployees"), totalEmployees);
+        animateNumber(document.getElementById("totalPWD"), totalPWD);
+        animateNumber(document.getElementById("totalSenior"), totalSenior);
+      }
+    };
+
+    onValue(ref(db, "employees"), updateDashboard);
+
+    employeeTable.addEventListener("click", async (e) => {
+      const key = e.target.dataset.key;
+      if(!key) return;
+      if(e.target.classList.contains("editBtn")){
+        const snap = await get(ref(db, "employees/"+key));
+        const emp = snap.val();
+        document.getElementById("name").value = emp.name;
+        document.getElementById("position").value = emp.position;
+        document.getElementById("department").value = emp.department;
+        document.getElementById("birthday").value = emp.birthday;
+        document.getElementById("age").value = emp.age;
+        document.getElementById("address").value = emp.address;
+        document.getElementById("sex").value = emp.sex;
+        document.getElementById("pwd").checked = emp.pwd;
+        document.getElementById("senior").checked = emp.senior;
+        preview.src = emp.photo || "";
+        preview.style.display = emp.photo ? "block" : "none";
+        editKey.value = key;
+        document.getElementById("addBtn").textContent = "Update Employee";
+      }
+      if(e.target.classList.contains("deleteBtn")){
+        if(confirm("Delete this employee?")){
+          await remove(ref(db, "employees/"+key));
+        }
+      }
+    });
+
+    document.getElementById("logoutBtn").addEventListener("click", () => {
+      localStorage.removeItem("loggedIn");
+      window.location.href = "index.html";
+    });
+  </script>
+</body>
+</html>
